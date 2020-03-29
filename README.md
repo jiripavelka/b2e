@@ -1,8 +1,8 @@
 # Box To Eclipse
 
-> Manage multiple source folders in one project in Eclipse
+> Manage multiple source folders in one Eclipse project
 
-This script copies project source files from a source folder into a project in Eclipse. It keeps track of individual source folders using branches and automatic commits in git.
+This script copies project source files from a synced Box folder into an Eclipse project. It keeps track of individual source folders using git branches and automatic committing.
 
 ## Requirements
 
