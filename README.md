@@ -6,13 +6,14 @@ This script copies project source files from a synced Box folder into an Eclipse
 
 ## Requirements
 
- - git
+ - Bash, version 3.2 and later
+ - Git, version 1.8.0 and later
 
 ## Installation
 
 1) Download the script or clone repository into your file system.
 
-   Tip: Save the script into PATH or add its directory into PATH.
+   Tip: Place the script into your `$PATH` (e.g. into `~/bin`).
 
 ## Setup and Usage
 
@@ -24,7 +25,7 @@ This script copies project source files from a synced Box folder into an Eclipse
 
    ```
    { ~ } » cd ~/eclipse-workspace/csc220
-   { csc220 } » b2e.sh ~/Box/hngu220
+   { csc220 } » b2e ~/Box/hngu220
    ```
 
 4) Refresh your Eclipse Package Explorer (F5)

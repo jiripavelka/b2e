@@ -1,0 +1,64 @@
+#!/bin/bash
+
+SRC_DIR="$1"
+DEST_DIR="${2:-.}"
+RES_DIR="src"
+SCRIPT_NAME="$(basename "$0")"
+USAGE="USAGE: $SCRIPT_NAME SOURCE [DESTINATION]"
+BRANCH_NAME="$(basename "$SRC_DIR")"
+
+exception () {
+  MSG=${1:-"$SCRIPT_NAME exception"}
+  echo "EXCEPTION: $MSG" >&2
+  EC="${2:-1}"
+  [ "$EC" -eq 2 ] \
+    && echo $USAGE >&2
+  exit "$EC"
+}
+git_init () {
+  git -C "$DEST_DIR" init \
+    && echo -e "/*\n!.gitignore\n!/$RES_DIR" > .gitignore \
+    && git_commit "Init git" \
+    || exit 1
+}
+git_commit () {
+  MSG=${1:-"$SCRIPT_NAME autocommit"}
+  ERR="$(git -C "$DEST_DIR" add --all 2>&1)" \
+    || exception "$ERR"
+  git -C "$DEST_DIR" commit --allow-empty -qam "$MSG" \
+    || exit 1
+}
+git_status () {
+  git -C "$DEST_DIR" status --porcelain 2>&1 \
+    || exit 1
+}
+git_branch () {
+  rm -rf "$DEST_DIR/$RES_DIR" \
+    || exception "Unable to delete folder $DEST_DIR/$RES_DIR"
+  git -C "$DEST_DIR" checkout -qb "$1" \
+    && echo "Switched to new branch $1" \
+    && git_commit "Init branch $1"
+}
+
+[[ -n "$SRC_DIR" ]] \
+  || exception "Missing source folder" 2
+[[ -d "$SRC_DIR" ]] \
+  || exception "Source folder $SRC_DIR does not exist"
+[[ -d "$DEST_DIR/$RES_DIR" ]] \
+  || exception "Destination folder $DEST_DIR/$RES_DIR does not exist"
+[[ -d "$DEST_DIR/.git" ]] \
+  || git_init
+[[ -z "$(git_status)" ]] \
+  || git_commit
+
+git -C "$DEST_DIR" checkout -q "$BRANCH_NAME" 2>/dev/null \
+  && echo "Switched to existing branch $BRANCH_NAME" \
+  || git_branch "$BRANCH_NAME"
+rsync -a --delete "$SRC_DIR" "$DEST_DIR/$RES_DIR" \
+  || exception "Unable to sync folders"
+
+[[ -z "$(git_status)" ]] \
+  && echo "No changes since last update" \
+  && exit
+git_commit "Copy folder $BRANCH_NAME"
+git diff --shortstat HEAD~1
