@@ -54,7 +54,7 @@ git_branch () {
 git -C "$DEST_DIR" checkout -q "$BRANCH_NAME" 2>/dev/null \
   && echo "Switched to existing branch $BRANCH_NAME" \
   || git_branch "$BRANCH_NAME"
-rsync -a --delete "$SRC_DIR" "$DEST_DIR/$RES_DIR" \
+rsync -a --delete "$SRC_DIR/" "$DEST_DIR/$RES_DIR" \
   || exception "Unable to sync folders"
 
 [[ -z "$(git_status)" ]] \
