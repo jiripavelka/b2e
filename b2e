@@ -1,60 +1,103 @@
 #!/bin/bash
 
-SRC_DIR="$1"
-DEST_DIR="${2:-.}"
-RES_DIR="src"
-SCRIPT_NAME="$(basename "$0")"
-USAGE="USAGE: $SCRIPT_NAME SOURCE [DESTINATION]"
-BRANCH_NAME="$(basename "$SRC_DIR")"
-
+colorize () {
+  sed "s/--\?[a-zA-Z]\+\|$SCRIPT_NAME\|^[A-Z].\+/\\\e[1;37m\0\\\e[m/g"
+}
+format_usage () {
+  fmt -w "$(tput cols)" | colorize
+}
 exception () {
-  MSG=${1:-"$SCRIPT_NAME exception"}
-  echo "EXCEPTION: $MSG" >&2
-  EC="${2:-1}"
-  [ "$EC" -eq 2 ] \
-    && echo $USAGE >&2
-  exit "$EC"
+  echo "$SCRIPT_NAME: ${1:-"unknown error"}" >&2
+  exit "${2:-1}"
 }
 git_init () {
-  git -C "$DEST_DIR" init \
+  git -C "$ROOT_DIR" init \
     && echo -e "/*\n!.gitignore\n!/$RES_DIR" > .gitignore \
     && git_commit "Init git" \
     || exit 1
 }
 git_commit () {
+  local MSG
   MSG=${1:-"$SCRIPT_NAME autocommit"}
-  ERR="$(git -C "$DEST_DIR" add --all 2>&1)" \
+  ERR="$(git -C "$ROOT_DIR" add --all 2>&1)" \
     || exception "$ERR"
-  git -C "$DEST_DIR" commit --allow-empty -qam "$MSG" \
+  git -C "$ROOT_DIR" commit --allow-empty -qam "$MSG" \
     || exit 1
 }
 git_status () {
-  git -C "$DEST_DIR" status --porcelain 2>&1 \
+  git -C "$ROOT_DIR" status --porcelain 2>&1 \
     || exit 1
 }
 git_branch () {
-  rm -rf "$DEST_DIR/$RES_DIR" \
-    || exception "Unable to delete folder $DEST_DIR/$RES_DIR"
-  git -C "$DEST_DIR" checkout -qb "$1" \
+  rm -rf "$ROOT_DIR/$RES_DIR" \
+    || exception "Unable to delete folder $ROOT_DIR/$RES_DIR"
+  git -C "$ROOT_DIR" checkout -qb "$1" \
     && echo "Switched to new branch $1" \
     && git_commit "Init branch $1"
 }
+
+RES_DIR="src"
+ROOT_DEPTH=1
+SCRIPT_NAME="$(basename "$0")"
+USAGE="$(cat << STR | format_usage
+DESCRIPTION
+       $SCRIPT_NAME copies (synces) files from SOURCE folder into DESTINATION on corresponding branches using git.
+       
+USAGE 
+       $SCRIPT_NAME [-h] [-r N] SOURCE [DESTINATION]
+
+OPTIONS
+       -h, --help
+              Display this usage.
+
+       -p N, --parent-folder=N
+              Preserve N parent folders from SOURCE (default 1).
+STR
+)"
+
+LINE=$(getopt \
+  -n "$0" \
+  -o p:h \
+  -l parent-folder:,help \
+  -- "$@") \
+  || exit 1
+eval set -- "$LINE"
+while [ $# -gt 0 ]; do 
+  case $1 in
+    -p|--parent-folder) ROOT_DEPTH="$2"; shift 2 ;;
+    -h|--help) echo -e "$USAGE" && exit 0 ;;
+    --) shift; break ;;
+    *-) exception "Unrecognized option '$1'" 2 ;;
+     *) break ;;
+  esac
+done
+
+SRC_DIR="$1"
+ROOT_DIR="${2:-.}"
 
 [[ -n "$SRC_DIR" ]] \
   || exception "Missing source folder" 2
 [[ -d "$SRC_DIR" ]] \
   || exception "Source folder $SRC_DIR does not exist"
-[[ -d "$DEST_DIR/$RES_DIR" ]] \
-  || exception "Destination folder $DEST_DIR/$RES_DIR does not exist"
-[[ -d "$DEST_DIR/.git" ]] \
+[[ -d "$ROOT_DIR/$RES_DIR" ]] \
+  || exception "Destination folder $ROOT_DIR/$RES_DIR does not exist"
+[[ "$ROOT_DEPTH" =~ ^[1-9][0-9]*$ ]] \
+  || exception "Invalid parent-folder value '$ROOT_DEPTH'" 2
+[[ -d "$ROOT_DIR/.git" ]] \
   || git_init
 [[ -z "$(git_status)" ]] \
   || git_commit
 
-git -C "$DEST_DIR" checkout -q "$BRANCH_NAME" 2>/dev/null \
+PRJ_DIR="$(realpath "$SRC_DIR" | rev | cut -d "/" -f-"$ROOT_DEPTH" | rev)"
+BRANCH_NAME="$(echo "$PRJ_DIR" | tr "/" "-")"
+DEST_DIR="$ROOT_DIR/$RES_DIR/$(echo "$PRJ_DIR/" | cut -d "/" -f2-)"
+
+git -C "$ROOT_DIR" checkout -q "$BRANCH_NAME" 2>/dev/null \
   && echo "Switched to existing branch $BRANCH_NAME" \
   || git_branch "$BRANCH_NAME"
-rsync -a --delete "$SRC_DIR/" "$DEST_DIR/$RES_DIR" \
+mkdir -p "$DEST_DIR" \
+  || exit 1
+rsync -a --delete "$SRC_DIR/" "$DEST_DIR" \
   || exception "Unable to sync folders"
 
 [[ -z "$(git_status)" ]] \
