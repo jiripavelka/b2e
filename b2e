@@ -21,21 +21,17 @@ git_init () {
 git_checkout () {
   $DRY_RUN \
     && return
-  BRANCH_EXISTS="$(git -C "$ROOT_DIR" branch | grep "^\  $1$")"
-  git -C "$ROOT_DIR" checkout $VERBOSE -B "$1" \
-    || exit 1
-  [[ "$BRANCH_EXISTS" != "" ]] \
+  git -C "$ROOT_DIR" branch | grep -q "^  $1$" \
+    && git -C "$ROOT_DIR" checkout $VERBOSE "$1" \
     && return
-  rm -rf "$ROOT_DIR/$RES_DIR" \
-    && git_commit "Init branch $1" "--quiet --allow-empty" \
-    || exit 1
+  git -C "$ROOT_DIR" checkout $VERBOSE --orphan "$1"
 }
 git_commit () {
   $DRY_RUN \
     && return
   git -C "$ROOT_DIR" add --all \
-    && git -C "$ROOT_DIR" commit $2 -am "$SCRIPT_NAME: ${1:-"No message"}" | head -n2
-  return $?
+    && git -C "$ROOT_DIR" commit $2 -am "$SCRIPT_NAME: ${1:-"No message"}" | head -n2 \
+    || exit 1
 }
 git_status () {
   git -C "$ROOT_DIR" status --porcelain 2>&1 \
@@ -115,4 +111,9 @@ $DRY_RUN \
 mkdir -p "$DEST_DIR" \
   && rsync -r $VERBOSE --delete "$SRC_DIR/" "$DEST_DIR" \
   || exit 1
-git_commit "Sync folder $BRANCH_NAME" "$VERBOSE"
+
+[[ -n "$(git_status)" ]] \
+  && git_commit "Sync folder $BRANCH_NAME" "$VERBOSE" \
+  && exit
+[[ -z "$VERBOSE" ]] \
+  && echo "No changes since last update" 
