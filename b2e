@@ -24,7 +24,8 @@ git_checkout () {
   git -C "$ROOT_DIR" branch | grep -q "^  $1$" \
     && git -C "$ROOT_DIR" checkout $VERBOSE "$1" \
     && return
-  git -C "$ROOT_DIR" checkout $VERBOSE --orphan "$1"
+  git -C "$ROOT_DIR" checkout $VERBOSE --orphan "$1" \
+    || exit 1
 }
 git_commit () {
   $DRY_RUN \
@@ -48,7 +49,7 @@ DESCRIPTION
        $SCRIPT_NAME synces files from SOURCE folder into DESTINATION on corresponding branches using git.
        
 USAGE 
-       $SCRIPT_NAME [-h] [-r N] SOURCE [DESTINATION]
+       $SCRIPT_NAME [-hnv] [-p N] SOURCE [DESTINATION]
 
 OPTIONS
        -h, --help
@@ -68,7 +69,7 @@ STR
 LINE=$(getopt \
   -n "$0" \
   -o hnp:v \
-  -l help,dry-run,parent-folder,verbose: \
+  -l help,dry-run,parent-folder:,verbose \
   -- "$@") \
   || exit 1
 eval set -- "$LINE"
