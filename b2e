@@ -14,8 +14,8 @@ git_init () {
   $DRY_RUN \
     && exit
   git -C "$ROOT_DIR" init $VERBOSE \
-    && echo -e "/*\n!.gitignore\n!/$RES_DIR" > .gitignore \
-    && git_commit "Init git" "--quiet --allow-empty" \
+    && echo -e "/*\n!.gitignore\n!$RES_DIR" > .gitignore \
+    && git -C "$ROOT_DIR" add -- .gitignore \
     || exit 1
 }
 git_checkout () {
@@ -25,13 +25,15 @@ git_checkout () {
     && git -C "$ROOT_DIR" checkout $VERBOSE "$1" \
     && return
   git -C "$ROOT_DIR" checkout $VERBOSE --orphan "$1" \
+    && git -C "$ROOT_DIR" reset -- "$RES_DIR" \
     || exit 1
 }
 git_commit () {
   $DRY_RUN \
     && return
-  git -C "$ROOT_DIR" add --all \
-    && git -C "$ROOT_DIR" commit $2 -am "$SCRIPT_NAME: ${1:-"No message"}" | head -n2 \
+  git -C "$ROOT_DIR" add -- "$3" \
+    && git -C "$ROOT_DIR" commit $2 -m "$SCRIPT_NAME: ${1:-"No message"}" | head -n2 \
+    && git -C "$ROOT_DIR" clean -fdq -- "$RES_DIR" \
     || exit 1
 }
 git_status () {
@@ -99,22 +101,22 @@ ROOT_DIR="${2:-.}"
 [[ -d "$ROOT_DIR/.git" ]] \
   || git_init
 [[ -z "$(git_status)" ]] \
-  || git_commit "Autocommit" "$VERBOSE"
+  || git_commit "Autocommit" "$VERBOSE" "$RES_DIR"
 
 PRJ_DIR="$(realpath "$SRC_DIR" | rev | cut -d "/" -f-"$ROOT_DEPTH" | rev)"
 BRANCH_NAME="$(echo "$PRJ_DIR" | tr "/" "-")"
-DEST_DIR="$ROOT_DIR/$RES_DIR/$(echo "$PRJ_DIR/" | cut -d "/" -f2-)"
+DEST_DIR="$RES_DIR/$(echo "$PRJ_DIR/" | cut -d "/" -f2-)"
 git -C "$ROOT_DIR" branch | grep -q "^\* $BRANCH_NAME$" \
   || git_checkout "$BRANCH_NAME"
 
 $DRY_RUN \
   && exit
-mkdir -p "$DEST_DIR" \
-  && rsync -r $VERBOSE --delete "$SRC_DIR/" "$DEST_DIR" \
+mkdir -p "$ROOT_DIR/$DEST_DIR" \
+  && rsync -r $VERBOSE --delete "$SRC_DIR/" "$ROOT_DIR/$DEST_DIR" \
   || exit 1
 
 [[ -n "$(git_status)" ]] \
-  && git_commit "Sync folder $BRANCH_NAME" "$VERBOSE" \
+  && git_commit "Sync folder $BRANCH_NAME" "$VERBOSE" "$DEST_DIR" \
   && exit
 [[ -z "$VERBOSE" ]] \
   && echo "No changes since last update" 
