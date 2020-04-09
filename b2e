@@ -15,7 +15,7 @@ git_init () {
     && exit
   git -C "$ROOT_DIR" init $VERBOSE \
     && echo -e "/*\n!.gitignore\n!$RES_DIR" > .gitignore \
-    && git -C "$ROOT_DIR" add -- .gitignore \
+    && git_commit "Add git ignore" "--quiet" ".gitignore" \
     || exit 1
 }
 git_checkout () {
@@ -33,7 +33,7 @@ git_commit () {
     && return
   git -C "$ROOT_DIR" add -- "$3" \
     && git -C "$ROOT_DIR" commit $2 -m "$SCRIPT_NAME: ${1:-"No message"}" | head -n2 \
-    && git -C "$ROOT_DIR" clean -fdq -- "$RES_DIR" \
+    && git -C "$ROOT_DIR" clean -fdq -- "$RES_DIR/" \
     || exit 1
 }
 git_status () {
@@ -42,18 +42,29 @@ git_status () {
 }
 
 RES_DIR="src"
+BIN_DIR="bin"
 ROOT_DEPTH=1
+AUTOCOMMIT=false
 DRY_RUN=false
 VERBOSE="--quiet"
 SCRIPT_NAME="$(basename "$0")"
+FILTER="$(cat << STR
++ *.java
++ */
+- *
+STR
+)"
 USAGE="$(cat << STR | format_usage
 DESCRIPTION
        $SCRIPT_NAME synces files from SOURCE folder into DESTINATION on corresponding branches using git.
        
 USAGE 
-       $SCRIPT_NAME [-hnv] [-p N] SOURCE [DESTINATION]
+       $SCRIPT_NAME [-ahnv] [-p N] SOURCE [DESTINATION]
 
 OPTIONS
+       -a, --autocommit
+              Commit changes if git status not empty.
+
        -h, --help
               Display this usage.
 
@@ -70,13 +81,14 @@ STR
 
 LINE=$(getopt \
   -n "$0" \
-  -o hnp:v \
-  -l help,dry-run,parent-folder:,verbose \
+  -o ahnp:v \
+  -l autocommit,help,dry-run,parent-folder:,verbose \
   -- "$@") \
   || exit 1
 eval set -- "$LINE"
 while [ $# -gt 0 ]; do 
   case $1 in
+    -a|--autocommit) AUTOCOMMIT=true; shift ;;
     -h|--help) echo -e "$USAGE" && exit 0 ;;
     -n|--dry-run) DRY_RUN=true; shift ;;
     -p|--parent-folder) ROOT_DEPTH="$2"; shift 2 ;;
@@ -94,14 +106,19 @@ ROOT_DIR="${2:-.}"
   || exception "Missing source folder" 2
 [[ -d "$SRC_DIR" ]] \
   || exception "Source folder $SRC_DIR does not exist"
+[[ -d "$BIN_DIR" ]] \
+  || exception "Binary folder $BIN_DIR does not exist"
 [[ -d "$ROOT_DIR/$RES_DIR" ]] \
   || exception "Destination folder $ROOT_DIR/$RES_DIR does not exist"
 [[ "$ROOT_DEPTH" =~ ^[1-9][0-9]*$ ]] \
   || exception "Invalid parent-folder value '$ROOT_DEPTH'" 2
 [[ -d "$ROOT_DIR/.git" ]] \
   || git_init
+[[ -n "$(git_status)" ]] \
+  && $AUTOCOMMIT \
+  && git_commit "Autocommit" "$VERBOSE" "$RES_DIR"
 [[ -z "$(git_status)" ]] \
-  || git_commit "Autocommit" "$VERBOSE" "$RES_DIR"
+  || exception "Git status is not empty"
 
 PRJ_DIR="$(realpath "$SRC_DIR" | rev | cut -d "/" -f-"$ROOT_DEPTH" | rev)"
 BRANCH_NAME="$(echo "$PRJ_DIR" | tr "/" "-")"
@@ -112,7 +129,8 @@ git -C "$ROOT_DIR" branch | grep -q "^\* $BRANCH_NAME$" \
 $DRY_RUN \
   && exit
 mkdir -p "$ROOT_DIR/$DEST_DIR" \
-  && rsync -r $VERBOSE --delete "$SRC_DIR/" "$ROOT_DIR/$DEST_DIR" \
+  && rm -rf "$ROOT_DIR/$BIN_DIR/"* \
+  && echo "$FILTER" | rsync -r $VERBOSE --delete --filter='. -' "$SRC_DIR/" "$ROOT_DIR/$DEST_DIR" \
   || exit 1
 
 [[ -n "$(git_status)" ]] \
